@@ -9,7 +9,7 @@ public class BoardScoreCalculator
 {
     public static int ScoreWord(IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares)
     {
-        var score = AffectedWords(laidTiles, boardSquares)
+        var score = ScoredWords(laidTiles, boardSquares)
             .Distinct(new WordComparer()).ToArray()
             .Select(w => GetTileScore(w, laidTiles, boardSquares))
             .Sum();
@@ -19,32 +19,24 @@ public class BoardScoreCalculator
             : score;
     }
 
-    private static List<IEnumerable<(Square Square, Tile Tile)>> AffectedWords(IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares)
+    private static IEnumerable<IEnumerable<(Square Square, Tile Tile)>> ScoredWords(IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares)
     {
         var words = new List<IEnumerable<(Square Square, Tile Tile)>>();
-        
         foreach (var tile in laidTiles)
         {
             // Horizontal Words
-            if (TryFindWholeWord(true, tile.Square.Point, laidTiles, boardSquares, out var horizontalWord))
-            {
-                words.Add(horizontalWord.OrderBy(word => word.Square.Point.X).ThenBy(word => word.Square.Point.Y));
-            }
+            words.Add(TryFindWholeWord(true, tile.Square.Point, laidTiles, boardSquares));
 
             // Vertical Words
-            if (TryFindWholeWord(false, tile.Square.Point, laidTiles, boardSquares, out var verticalWord))
-            {
-                words.Add(verticalWord.OrderBy(word => word.Square.Point.X).ThenBy(word => word.Square.Point.Y));
-            }
+            words.Add(TryFindWholeWord(false, tile.Square.Point, laidTiles, boardSquares));
         }
 
-        return words;
+        return words.Where(w => w != null);
     }
 
-    private static bool TryFindWholeWord(bool isHorizontal, Point point, IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares, out List<(Square Square, Tile Tile)> word)
+    private static IEnumerable<(Square Square, Tile Tile)> TryFindWholeWord(bool isHorizontal, Point point, IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares)
     {
-        word = [];
-
+        var word = new List<(Square Square, Tile Tile)>();
         if (isHorizontal)
         {
             word.AddRange(FindConnectedTiles(-1, 0, point, laidTiles, boardSquares)); // LEFT
@@ -58,7 +50,9 @@ public class BoardScoreCalculator
             word.AddRange(FindConnectedTiles(0, 1, point, laidTiles, boardSquares));  // DOWN
         }
 
-        return word.Count > 1;
+        return word.Count > 1
+            ? word.OrderBy(w => w.Square.Point.X).ThenBy(w => w.Square.Point.Y)
+            : null;
     }
 
     private static List<(Square Square, Tile Tile)> FindConnectedTiles(int horizontalOffset, int verticalOffset, Point point, IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares)
@@ -139,7 +133,7 @@ public class BoardScoreCalculator
 
 public class WordComparer : IEqualityComparer<IEnumerable<(Square Square, Tile Tile)>>
 {
-    public bool Equals(IEnumerable<(Square Square, Tile Tile)> x, IEnumerable<(Square Square, Tile Tile)> y) => 
+    public bool Equals(IEnumerable<(Square Square, Tile Tile)> x, IEnumerable<(Square Square, Tile Tile)> y) =>
         x.First().Square.Point.Equals(y.First().Square.Point) &&
         x.Last().Square.Point.Equals(y.Last().Square.Point);
 
