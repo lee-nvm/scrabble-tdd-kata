@@ -23,12 +23,9 @@ public class BoardScoreCalculator
     {
         var words = new List<IEnumerable<(Square Square, Tile Tile)>>();
         foreach (var tile in laidTiles)
-        {
-            // Horizontal Words
-            words.Add(TryFindWholeWord(true, tile.Square.Point, laidTiles, boardSquares));
-
-            // Vertical Words
-            words.Add(TryFindWholeWord(false, tile.Square.Point, laidTiles, boardSquares));
+        {            
+            words.Add(TryFindWholeWord(true, tile.Square.Point, laidTiles, boardSquares));  // Horizontal Words            
+            words.Add(TryFindWholeWord(false, tile.Square.Point, laidTiles, boardSquares)); // Vertical Words
         }
 
         return words.Where(w => w != null);
@@ -36,19 +33,12 @@ public class BoardScoreCalculator
 
     private static IEnumerable<(Square Square, Tile Tile)> TryFindWholeWord(bool isHorizontal, Point point, IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares)
     {
-        var word = new List<(Square Square, Tile Tile)>();
-        if (isHorizontal)
-        {
-            word.AddRange(FindConnectedTiles(-1, 0, point, laidTiles, boardSquares)); // LEFT
-            word.Add(laidTiles.First(t => t.Square.Point.Equals(point)));
-            word.AddRange(FindConnectedTiles(1, 0, point, laidTiles, boardSquares));  // RIGHT
-        }
-        else
-        {
-            word.AddRange(FindConnectedTiles(0, -1, point, laidTiles, boardSquares)); // UP
-            word.Add(laidTiles.First(t => t.Square.Point.Equals(point)));
-            word.AddRange(FindConnectedTiles(0, 1, point, laidTiles, boardSquares));  // DOWN
-        }
+        var horizontalOffset = Convert.ToInt32(isHorizontal);
+        var verticalOffset = Math.Abs(horizontalOffset - 1);
+
+        List<(Square Square, Tile Tile)> word = [laidTiles.First(t => t.Square.Point.Equals(point))];
+        word.AddRange(FindConnectedTiles(-horizontalOffset, -verticalOffset, point, laidTiles, boardSquares));
+        word.AddRange(FindConnectedTiles(horizontalOffset, verticalOffset, point, laidTiles, boardSquares)); 
 
         return word.Count > 1
             ? word.OrderBy(w => w.Square.Point.X).ThenBy(w => w.Square.Point.Y)
