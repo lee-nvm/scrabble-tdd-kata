@@ -1,154 +1,147 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 
-namespace Scrabble.Lib
+namespace Scrabble.Lib;
+
+public class BoardScoreCalculator
 {
-    public class BoardScoreCalculator
+    public static int ScoreWord(IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares)
     {
-        public static int ScoreWord(IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares)
-        {
-            var affectedWords = AffectedWords(laidTiles.ToArray(), boardSquares);
-            var distinctWords = GetDistinctWords(affectedWords);
+        var score = AffectedWords(laidTiles, boardSquares)
+            .Distinct(new WordComparer()).ToArray()
+            .Select(w => GetTileScore(w, laidTiles, boardSquares))
+            .Sum();
 
-            var score = distinctWords.Select(w => GetTileScore(w, laidTiles, boardSquares)).Sum();
-            if (laidTiles.Count() == 7)
+        return laidTiles.Count() == 7
+            ? score += 50
+            : score;
+    }
+
+    private static List<IEnumerable<(Square Square, Tile Tile)>> AffectedWords(IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares)
+    {
+        var words = new List<IEnumerable<(Square Square, Tile Tile)>>();
+        
+        foreach (var tile in laidTiles)
+        {
+            // Horizontal Words
+            if (TryFindWholeWord(true, tile.Square.Point, laidTiles, boardSquares, out var horizontalWord))
             {
-                score += 50;
+                words.Add(horizontalWord.OrderBy(word => word.Square.Point.X).ThenBy(word => word.Square.Point.Y));
             }
 
-            return score;
+            // Vertical Words
+            if (TryFindWholeWord(false, tile.Square.Point, laidTiles, boardSquares, out var verticalWord))
+            {
+                words.Add(verticalWord.OrderBy(word => word.Square.Point.X).ThenBy(word => word.Square.Point.Y));
+            }
         }
 
-        private static List<IEnumerable<(Square Square, Tile Tile)>> AffectedWords((Square Square, Tile Tile)[] laidTiles, IEnumerable<Square> boardSquares)
+        return words;
+    }
+
+    private static bool TryFindWholeWord(bool isHorizontal, Point point, IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares, out List<(Square Square, Tile Tile)> word)
+    {
+        word = [];
+
+        if (isHorizontal)
         {
-            var words = new List<IEnumerable<(Square Square, Tile Tile)>>();
-            
-            foreach (var tile in laidTiles)
-            {
-                // Horizontal Words
-                if (TryFindWholeWord(true, tile.Square.Point, laidTiles, boardSquares, out var horizontalWord))
-                {
-                    words.Add(horizontalWord.OrderBy(word => word.Square.Point.X).ThenBy(word => word.Square.Point.Y));
-                }
-
-                // Vertical Words
-                if (TryFindWholeWord(false, tile.Square.Point, laidTiles, boardSquares, out var verticalWord))
-                {
-                    words.Add(verticalWord.OrderBy(word => word.Square.Point.X).ThenBy(word => word.Square.Point.Y));
-                }
-            }
-
-            return words;
+            word.AddRange(FindConnectedTiles(-1, 0, point, laidTiles, boardSquares)); // LEFT
+            word.Add(laidTiles.First(t => t.Square.Point.Equals(point)));
+            word.AddRange(FindConnectedTiles(1, 0, point, laidTiles, boardSquares));  // RIGHT
+        }
+        else
+        {
+            word.AddRange(FindConnectedTiles(0, -1, point, laidTiles, boardSquares)); // UP
+            word.Add(laidTiles.First(t => t.Square.Point.Equals(point)));
+            word.AddRange(FindConnectedTiles(0, 1, point, laidTiles, boardSquares));  // DOWN
         }
 
-        private static bool TryFindWholeWord(bool isHorizontal, Point point, IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares, out List<(Square Square, Tile Tile)> word)
+        return word.Count > 1;
+    }
+
+    private static List<(Square Square, Tile Tile)> FindConnectedTiles(int horizontalOffset, int verticalOffset, Point point, IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares)
+    {
+        var affectedTitles = new List<(Square Square, Tile Tile)>();
+
+        var nextPoint = GetPoint(horizontalOffset, verticalOffset, point);
+        if (nextPoint == null)
         {
-            word = [];
-
-            if (isHorizontal)
-            {
-
-                word.AddRange(FindAllTiles(-1, 0, point, laidTiles, boardSquares)); // LEFT
-                word.Add(laidTiles.First(t => t.Square.Point.Equals(point)));
-                word.AddRange(FindAllTiles(1, 0, point, laidTiles, boardSquares));  // RIGHT
-            }
-            else
-            {
-                word.AddRange(FindAllTiles(0, -1, point, laidTiles, boardSquares)); // UP
-                word.Add(laidTiles.First(t => t.Square.Point.Equals(point)));
-                word.AddRange(FindAllTiles(0, 1, point, laidTiles, boardSquares));  // DOWN
-            }
-
-            return word.Count > 1;
+            return affectedTitles;
         }
 
-        private static List<(Square Square, Tile Tile)> FindAllTiles(int horizontalOffset, int verticalOffset, Point point, IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares)
+        var existingTile = laidTiles.FirstOrDefault(t => t.Square.Point.Equals(nextPoint));
+        if (existingTile != default((Square Square, Tile Tile)))
         {
-            var affectedTitles = new List<(Square Square, Tile Tile)>();
-
-            var nextPoint = GetPoint(horizontalOffset, verticalOffset, point);
-            if (nextPoint == null)
+            affectedTitles.Add(existingTile);
+            affectedTitles.AddRange(FindConnectedTiles(horizontalOffset, verticalOffset, nextPoint.Value, laidTiles, boardSquares));
+        }
+        else
+        {
+            var nextSquare = boardSquares.First(s => s.Point.Equals(nextPoint));
+            if (nextSquare.State is Vacant)
             {
                 return affectedTitles;
             }
 
-            var existingTile = laidTiles.FirstOrDefault(t => t.Square.Point.Equals(nextPoint));
-            if (existingTile != default((Square Square, Tile Tile)))
+            var state = nextSquare.State as Occupied;
+            affectedTitles.Add((nextSquare, state.Tile));
+            affectedTitles.AddRange(FindConnectedTiles(horizontalOffset, verticalOffset, nextPoint.Value, laidTiles, boardSquares));
+        }
+
+        return affectedTitles;
+    }
+
+    private static Point? GetPoint(int horizontalOffset, int verticalOffset, Point point)
+    {
+        var horizontalPos = point.X + horizontalOffset;
+        if (horizontalPos < 65 || horizontalPos > 79) return null;  // A -> O
+
+        var verticalPos = point.Y + verticalOffset;
+        if (verticalPos < 1 || verticalPos > 15) return null;
+
+        return Point.Create($"{(char)horizontalPos}{verticalPos}");
+    }
+
+    private static int GetTileScore(IEnumerable<(Square Square, Tile Tile)> word, IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares)
+    {
+        var score = 0;
+        var multiplier = 0;
+        foreach (var tile in word)
+        {
+            if (laidTiles.Any(t => t.Square.Point.Equals(tile.Square.Point)))
             {
-                affectedTitles.Add(existingTile);
-                affectedTitles.AddRange(FindAllTiles(horizontalOffset, verticalOffset, nextPoint.Value, laidTiles, boardSquares));
+                var square = boardSquares.First(s => s.Point.Equals(tile.Square.Point));
+                score += square.Type.ToString() switch
+                {
+                    "DL" => tile.Tile.Value * 2,
+                    "TL" => tile.Tile.Value * 3,
+                    _ => tile.Tile.Value
+                };
+                multiplier += square.Type.ToString() switch
+                {
+                    "DW" => 2,
+                    "TW" => 3,
+                    "C" => 2,
+                    _ => 0
+                };
             }
             else
             {
-                var nextSquare = boardSquares.First(s => s.Point.Equals(nextPoint));
-                if (nextSquare.State is Vacant)
-                {
-                    return affectedTitles;
-                }
-
-                var state = nextSquare.State as Occupied;
-                affectedTitles.Add((nextSquare, state.Tile));
-                affectedTitles.AddRange(FindAllTiles(horizontalOffset, verticalOffset, nextPoint.Value, laidTiles, boardSquares));
+                score += tile.Tile.Value;
             }
-
-            return affectedTitles;
         }
 
-        private static Point? GetPoint(int horizontalOffset, int verticalOffset, Point point)
-        {
-            var horizontalPos = point.X + horizontalOffset;
-            if (horizontalPos < 65 || horizontalPos > 79) return null;  // A -> O
-
-            var verticalPos = point.Y + verticalOffset;
-            if (verticalPos < 1 || verticalPos > 15) return null;
-
-            return Point.Create($"{(char)horizontalPos}{verticalPos}");
-        }
-
-        private static List<IEnumerable<(Square Square, Tile Tile)>> GetDistinctWords(IEnumerable<IEnumerable<(Square Square, Tile Tile)>> words)
-        {
-            var distinctWords = new List<IEnumerable<(Square Square, Tile Tile)>>();
-            foreach (var word in words)
-            {
-                if (!distinctWords.Any(dw => dw.First().Square.Point.Equals(word.First().Square.Point) && dw.Last().Square.Point.Equals(word.Last().Square.Point)))
-                {
-                    distinctWords.Add(word);
-                }
-            }
-            return distinctWords;
-        }
-
-        private static int GetTileScore(IEnumerable<(Square Square, Tile Tile)> word, IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares)
-        {
-            var score = 0;
-            var multiplier = 0;
-            foreach (var tile in word)
-            {
-                if (laidTiles.Any(t => t.Square.Point.Equals(tile.Square.Point)))
-                {
-                    var square = boardSquares.First(s => s.Point.Equals(tile.Square.Point));
-                    score += square.Type.ToString() switch
-                    {
-                        "DL" => tile.Tile.Value * 2,
-                        "TL" => tile.Tile.Value * 3,
-                        _ => tile.Tile.Value
-                    };
-                    multiplier += square.Type.ToString() switch
-                    {
-                        "DW" => 2,
-                        "TW" => 3,
-                        "C" => 2,
-                        _ => 0
-                    };
-                }
-                else
-                {
-                    score += tile.Tile.Value;
-                }
-            }
-
-            return score * Math.Max(multiplier, 1);
-        }
+        return score * Math.Max(multiplier, 1);
     }
+}
+
+public class WordComparer : IEqualityComparer<IEnumerable<(Square Square, Tile Tile)>>
+{
+    public bool Equals(IEnumerable<(Square Square, Tile Tile)> x, IEnumerable<(Square Square, Tile Tile)> y) => 
+        x.First().Square.Point.Equals(y.First().Square.Point) &&
+        x.Last().Square.Point.Equals(y.Last().Square.Point);
+
+    public int GetHashCode([DisallowNull] IEnumerable<(Square Square, Tile Tile)> obj) => obj.First().GetHashCode() + obj.Last().GetHashCode();
 }
