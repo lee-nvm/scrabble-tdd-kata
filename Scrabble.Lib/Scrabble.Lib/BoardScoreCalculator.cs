@@ -8,17 +8,10 @@ namespace Scrabble.Lib
     {
         public static int ScoreWord(IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares)
         {
-            var score = 0;
             var affectedWords = AffectedWords(laidTiles.ToArray(), boardSquares);
-
             var distinctWords = GetDistinctWords(affectedWords);
 
-            foreach (var word in distinctWords)
-            {
-                var tileScore = GetTileScore(word, laidTiles, boardSquares);
-                score += tileScore * GetMultiplier(word, laidTiles, boardSquares);
-            }
-
+            var score = distinctWords.Select(w => GetTileScore(w, laidTiles, boardSquares)).Sum();
             if (laidTiles.Count() == 7)
             {
                 score += 50;
@@ -27,10 +20,10 @@ namespace Scrabble.Lib
             return score;
         }
 
-        private static IEnumerable<IEnumerable<(Square Square, Tile Tile)>> AffectedWords((Square Square, Tile Tile)[] laidTiles, IEnumerable<Square> boardSquares)
+        private static List<IEnumerable<(Square Square, Tile Tile)>> AffectedWords((Square Square, Tile Tile)[] laidTiles, IEnumerable<Square> boardSquares)
         {
             var words = new List<IEnumerable<(Square Square, Tile Tile)>>();
-
+            
             foreach (var tile in laidTiles)
             {
                 // Horizontal Words
@@ -70,7 +63,7 @@ namespace Scrabble.Lib
             return word.Count > 1;
         }
 
-        private static IEnumerable<(Square Square, Tile Tile)> FindAllTiles(int horizontalOffset, int verticalOffset, Point point, IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares)
+        private static List<(Square Square, Tile Tile)> FindAllTiles(int horizontalOffset, int verticalOffset, Point point, IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares)
         {
             var affectedTitles = new List<(Square Square, Tile Tile)>();
 
@@ -113,7 +106,7 @@ namespace Scrabble.Lib
             return Point.Create($"{(char)horizontalPos}{verticalPos}");
         }
 
-        private static IEnumerable<IEnumerable<(Square Square, Tile Tile)>> GetDistinctWords(IEnumerable<IEnumerable<(Square Square, Tile Tile)>> words)
+        private static List<IEnumerable<(Square Square, Tile Tile)>> GetDistinctWords(IEnumerable<IEnumerable<(Square Square, Tile Tile)>> words)
         {
             var distinctWords = new List<IEnumerable<(Square Square, Tile Tile)>>();
             foreach (var word in words)
@@ -129,28 +122,18 @@ namespace Scrabble.Lib
         private static int GetTileScore(IEnumerable<(Square Square, Tile Tile)> word, IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares)
         {
             var score = 0;
-            foreach (var tile in word)
-            {
-                var square = boardSquares.First(s => s.Point.Equals(tile.Square.Point));
-                score += square.Type.ToString() switch
-                {
-                    "DL" => laidTiles.Any(t => t.Square.Point.Equals(tile.Square.Point)) ? tile.Tile.Value * 2 : tile.Tile.Value,
-                    "TL" => laidTiles.Any(t => t.Square.Point.Equals(tile.Square.Point)) ? tile.Tile.Value * 3 : tile.Tile.Value,
-                    _ => tile.Tile.Value
-                };
-            }
-
-            return score;
-        }
-
-        private static int GetMultiplier(IEnumerable<(Square Square, Tile Tile)> word, IEnumerable<(Square Square, Tile Tile)> laidTiles, IEnumerable<Square> boardSquares)
-        {
             var multiplier = 0;
             foreach (var tile in word)
             {
                 if (laidTiles.Any(t => t.Square.Point.Equals(tile.Square.Point)))
                 {
                     var square = boardSquares.First(s => s.Point.Equals(tile.Square.Point));
+                    score += square.Type.ToString() switch
+                    {
+                        "DL" => tile.Tile.Value * 2,
+                        "TL" => tile.Tile.Value * 3,
+                        _ => tile.Tile.Value
+                    };
                     multiplier += square.Type.ToString() switch
                     {
                         "DW" => 2,
@@ -159,9 +142,13 @@ namespace Scrabble.Lib
                         _ => 0
                     };
                 }
+                else
+                {
+                    score += tile.Tile.Value;
+                }
             }
 
-            return Math.Max(multiplier, 1);
+            return score * Math.Max(multiplier, 1);
         }
     }
 }
